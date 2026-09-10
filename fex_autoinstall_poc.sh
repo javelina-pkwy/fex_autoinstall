@@ -50,8 +50,59 @@ echo "Adding FEX-Emu PPA..."
 sudo add-apt-repository -y ppa:fex-emu/fex
 sudo apt update
 
-echo "Installing FEX-Emu and Vulkan packages..."
-sudo apt install -y fex-emu-$ARM_PLATFORM_VERSION fex-emu-wine patchelf mesa-vulkan-drivers
+FEX_PACKAGE="fex-emu-$ARM_PLATFORM_VERSION"
+
+echo "Looking up available $FEX_PACKAGE versions..."
+mapfile -t FEX_VERSIONS < <(apt-cache madison "$FEX_PACKAGE" | awk -F' \\| ' '{print $2}' | awk '{$1=$1;print}' | sort -u | sort -rV)
+
+FEX_VERSION=""
+if [ ${#FEX_VERSIONS[@]} -eq 0 ]; then
+  echo "Could not find any available versions of $FEX_PACKAGE, defaulting to latest available via apt."
+else
+  PAGE=0
+  PAGE_SIZE=5
+  TOTAL=${#FEX_VERSIONS[@]}
+  while [ -z "$FEX_VERSION" ]; do
+    START=$((PAGE * PAGE_SIZE))
+    END=$((START + PAGE_SIZE))
+    [ $END -gt $TOTAL ] && END=$TOTAL
+
+    echo ""
+    echo "Available $FEX_PACKAGE versions:"
+    for ((IDX = START; IDX < END; IDX++)); do
+      LABEL="${FEX_VERSIONS[$IDX]}"
+      [ "$IDX" -eq 0 ] && LABEL="$LABEL (latest)"
+      echo "  $((IDX + 1))) $LABEL"
+    done
+    [ $END -lt $TOTAL ] && echo "  n) Show next $PAGE_SIZE versions"
+    [ $PAGE -gt 0 ] && echo "  p) Show previous $PAGE_SIZE versions"
+
+    read -p "Select a version to install [1-$((END - START))${END:+, n/p}] (default: 1): " selection
+    selection=${selection:-1}
+
+    case "$selection" in
+      n|N) [ $END -lt $TOTAL ] && PAGE=$((PAGE + 1));;
+      p|P) [ $PAGE -gt 0 ] && PAGE=$((PAGE - 1));;
+      ''|*[!0-9]*) echo "Please enter a number, 'n', or 'p'.";;
+      *)
+        IDX=$((START + selection - 1))
+        if [ "$selection" -ge 1 ] && [ $IDX -lt $END ]; then
+          FEX_VERSION="${FEX_VERSIONS[$IDX]}"
+        else
+          echo "Invalid selection."
+        fi
+        ;;
+    esac
+  done
+fi
+
+if [ -n "$FEX_VERSION" ]; then
+  echo "Installing FEX-Emu $FEX_VERSION and Vulkan packages..."
+  sudo apt install -y "$FEX_PACKAGE=$FEX_VERSION" fex-emu-wine patchelf mesa-vulkan-drivers
+else
+  echo "Installing FEX-Emu and Vulkan packages..."
+  sudo apt install -y "$FEX_PACKAGE" fex-emu-wine patchelf mesa-vulkan-drivers
+fi
 
 echo "Downloading required files..."
 wget https://repo.steampowered.com/steam/archive/stable/steam-launcher_latest_all.deb
