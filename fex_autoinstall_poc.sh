@@ -11,11 +11,99 @@ TEMP_DIR=$(mktemp -d)
 
 cleanup() {
   cd "$ORIG_DIR"
-  rm -rf "$TEMP_DIR"
+  rm -rf "$TEMP_DIR" ${BUILD_DIR:+"$BUILD_DIR"}
   echo "Cleaned up temporary directory: $TEMP_DIR"
 }
 
 trap cleanup EXIT
+
+# Numbered menu shown 5 entries at a time; echoes the chosen entry.
+paged_select() {
+  local prompt="$1"; shift
+  local items=("$@")
+  local total=${#items[@]} page_size=5 page=0
+  while true; do
+    local start=$((page * page_size)) end=$((page * page_size + page_size))
+    [ $end -gt $total ] && end=$total
+    echo "" >&2
+    echo "$prompt" >&2
+    for ((i = start; i < end; i++)); do
+      local label="${items[$i]}"
+      [ $i -eq 0 ] && label="$label (latest)"
+      echo "  $((i - start + 1))) $label" >&2
+    done
+    local extra=""
+    [ $end -lt $total ] && { echo "  n) Show next $page_size" >&2; extra="$extra, n"; }
+    [ $page -gt 0 ] && { echo "  p) Show previous $page_size" >&2; extra="$extra, p"; }
+    read -rp "Select [1-$((end - start))$extra] (default: 1): " sel
+    sel=${sel:-1}
+    case "$sel" in
+      n|N) [ $end -lt $total ] && page=$((page + 1));;
+      p|P) [ $page -gt 0 ] && page=$((page - 1));;
+      *[!0-9]*) echo "Invalid selection." >&2;;
+      *)
+        if [ "$sel" -ge 1 ] && [ $((start + sel)) -le $end ]; then
+          echo "${items[$((start + sel - 1))]}"
+          return
+        fi
+        echo "Invalid selection." >&2;;
+    esac
+  done
+}
+
+# Builds a .deb of the given FEX tag using the current PPA's debian/ packaging,
+# so the result matches the PPA build (clang-17, lld, LTO, thunks, TUNE_ARCH).
+build_fex_from_source() {
+  local tag="$1" tag_version="${1#FEX-}"
+  local series
+  series=$(. /etc/os-release && echo "$VERSION_CODENAME")
+
+  echo "Looking up current PPA packaging for $FEX_PACKAGE ($series)..."
+  local sources
+  sources=$(curl -fsSL "https://launchpad.net/api/1.0/~fex-emu/+archive/ubuntu/fex?ws.op=getPublishedSources&source_name=$FEX_PACKAGE&status=Published")
+  local sourcepub
+  sourcepub=$(echo "$sources" | jq -r --arg s "$series" '[.entries[] | select(.distro_series_link | endswith("/" + $s))][0].self_link // empty')
+  if [ -z "$sourcepub" ]; then
+    echo "No $FEX_PACKAGE packaging published for '$series'; falling back to noble packaging."
+    sourcepub=$(echo "$sources" | jq -r '[.entries[] | select(.distro_series_link | endswith("/noble"))][0].self_link')
+  fi
+  local debian_tar_url
+  debian_tar_url=$(curl -fsSL "$sourcepub?ws.op=sourceFileUrls" | jq -r '.[] | select(endswith(".debian.tar.xz"))')
+
+  # /var/tmp is disk-backed; a FEX build is several GB and would not fit a tmpfs /tmp.
+  BUILD_DIR=$(mktemp -d /var/tmp/fex_build.XXXXXX)
+  echo "Cloning FEX $tag into $BUILD_DIR..."
+  git clone --depth 1 --branch "$tag" https://github.com/FEX-Emu/FEX.git "$BUILD_DIR/FEX"
+  pushd "$BUILD_DIR/FEX" >/dev/null
+
+  # Test-binary submodules are large and unused with BUILD_TESTING=False.
+  local submodules
+  submodules=$(git config --file .gitmodules --get-regexp path | awk '{print $2}' | grep -vE 'tests?-bins')
+  git submodule update --init --depth 1 $submodules || git submodule update --init $submodules
+
+  curl -fsSL "$debian_tar_url" | tar -xJ
+  sed -i "s/-DOVERRIDE_VERSION=[^ ]*/-DOVERRIDE_VERSION=$tag_version/" debian/rules
+  cat > debian/changelog <<EOF
+$FEX_PACKAGE (${tag_version}~local1) $series; urgency=medium
+
+  * Local build of FEX release $tag by fex_autoinstall.
+
+ -- fex_autoinstall <fex_autoinstall@localhost>  $(date -R)
+EOF
+
+  echo "Installing FEX build dependencies..."
+  sudo apt build-dep -y ./
+
+  echo "Building FEX $tag (this takes a long time)..."
+  dpkg-buildpackage -b -us -uc -j"$(nproc)"
+  popd >/dev/null
+
+  echo "Installing locally built $FEX_PACKAGE..."
+  sudo apt install -y "$BUILD_DIR"/${FEX_PACKAGE}_*.deb
+  # Keep apt from replacing the chosen release with the PPA's latest on upgrade.
+  sudo apt-mark hold "$FEX_PACKAGE"
+  echo "$FEX_PACKAGE is held at $tag; run 'sudo apt-mark unhold $FEX_PACKAGE' to allow PPA upgrades again."
+}
 
 nvidia_driver_version=$(cat /sys/module/nvidia/version 2>/dev/null || true)
 if [ -z "$nvidia_driver_version" ]; then
@@ -46,62 +134,38 @@ echo "Working in temporary directory: $TEMP_DIR"
 ARM_PLATFORM_VERSION=$(lscpu | grep -qE "dit|flagm2" && echo "armv8.4" || echo "armv8.2")
 echo "Detected ARM platform version: $ARM_PLATFORM_VERSION"
 
+FEX_PACKAGE="fex-emu-$ARM_PLATFORM_VERSION"
+
+echo ""
+echo "How would you like to install FEX?"
+echo "  1) Latest release from the FEX-Emu PPA (recommended, prebuilt)"
+echo "  2) Choose a specific FEX release and build it from source (slow: 30+ minutes, several GB of disk)"
+while true; do
+  read -rp "Select [1-2] (default: 1): " INSTALL_MODE
+  INSTALL_MODE=${INSTALL_MODE:-1}
+  case "$INSTALL_MODE" in
+    1|2) break;;
+    *) echo "Please enter 1 or 2.";;
+  esac
+done
+
 echo "Adding FEX-Emu PPA..."
 sudo add-apt-repository -y ppa:fex-emu/fex
 sudo apt update
 
-FEX_PACKAGE="fex-emu-$ARM_PLATFORM_VERSION"
-
-echo "Looking up available $FEX_PACKAGE versions..."
-mapfile -t FEX_VERSIONS < <(apt-cache madison "$FEX_PACKAGE" | awk -F' \\| ' '{print $2}' | awk '{$1=$1;print}' | sort -u | sort -rV)
-
-FEX_VERSION=""
-if [ ${#FEX_VERSIONS[@]} -eq 0 ]; then
-  echo "Could not find any available versions of $FEX_PACKAGE, defaulting to latest available via apt."
-else
-  PAGE=0
-  PAGE_SIZE=5
-  TOTAL=${#FEX_VERSIONS[@]}
-  while [ -z "$FEX_VERSION" ]; do
-    START=$((PAGE * PAGE_SIZE))
-    END=$((START + PAGE_SIZE))
-    [ $END -gt $TOTAL ] && END=$TOTAL
-
-    echo ""
-    echo "Available $FEX_PACKAGE versions:"
-    for ((IDX = START; IDX < END; IDX++)); do
-      LABEL="${FEX_VERSIONS[$IDX]}"
-      [ "$IDX" -eq 0 ] && LABEL="$LABEL (latest)"
-      echo "  $((IDX + 1))) $LABEL"
-    done
-    [ $END -lt $TOTAL ] && echo "  n) Show next $PAGE_SIZE versions"
-    [ $PAGE -gt 0 ] && echo "  p) Show previous $PAGE_SIZE versions"
-
-    read -p "Select a version to install [1-$((END - START))${END:+, n/p}] (default: 1): " selection
-    selection=${selection:-1}
-
-    case "$selection" in
-      n|N) [ $END -lt $TOTAL ] && PAGE=$((PAGE + 1));;
-      p|P) [ $PAGE -gt 0 ] && PAGE=$((PAGE - 1));;
-      ''|*[!0-9]*) echo "Please enter a number, 'n', or 'p'.";;
-      *)
-        IDX=$((START + selection - 1))
-        if [ "$selection" -ge 1 ] && [ $IDX -lt $END ]; then
-          FEX_VERSION="${FEX_VERSIONS[$IDX]}"
-        else
-          echo "Invalid selection."
-        fi
-        ;;
-    esac
-  done
-fi
-
-if [ -n "$FEX_VERSION" ]; then
-  echo "Installing FEX-Emu $FEX_VERSION and Vulkan packages..."
-  sudo apt install -y "$FEX_PACKAGE=$FEX_VERSION" fex-emu-wine patchelf mesa-vulkan-drivers
-else
+if [ "$INSTALL_MODE" = "1" ]; then
   echo "Installing FEX-Emu and Vulkan packages..."
-  sudo apt install -y "$FEX_PACKAGE" fex-emu-wine patchelf mesa-vulkan-drivers
+  sudo apt install -y "$FEX_PACKAGE" fex-emu-wine patchelf mesa-vulkan-drivers jq
+else
+  echo "Installing build tooling and Vulkan packages..."
+  sudo apt install -y git jq dpkg-dev debhelper fex-emu-wine patchelf mesa-vulkan-drivers
+
+  echo "Fetching FEX release tags..."
+  # Tags before FEX-2501 use a different tool layout/GUI toolkit than the current
+  # PPA packaging expects and are not offered.
+  mapfile -t FEX_TAGS < <(git ls-remote --tags https://github.com/FEX-Emu/FEX.git 'FEX-*' | grep -v '\^{}' | sed 's|.*refs/tags/||' | sort -rV | sed '/^FEX-2501$/q')
+  FEX_TAG=$(paged_select "Which FEX release do you want to build?" "${FEX_TAGS[@]}")
+  build_fex_from_source "$FEX_TAG"
 fi
 
 echo "Downloading required files..."

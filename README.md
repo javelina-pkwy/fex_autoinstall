@@ -5,8 +5,15 @@
 - If you have not already done so, run the following command on the new terminal window: `wget https://raw.githubusercontent.com/MitchellAugustin/fex_autoinstall/refs/heads/main/fex_autoinstall_poc.sh && bash fex_autoinstall_poc.sh`
 - Once installation has completed and for all subsequent runs, Steam can be started by running `steam` normally.
 
+## Choosing a FEX version
+The script asks how you want FEX installed:
+1. **Latest release from the FEX-Emu PPA** (default). Prebuilt and fast. The PPA only ever carries the current release, so this is the only version available this way.
+2. **Build a specific release from source.** You pick from the list of upstream `FEX-*` release tags, and the script clones that tag and builds a `.deb` using the PPA's own `debian/` packaging, so the result matches the PPA build (clang-17, lld, LTO, thunks, matching `TUNE_ARCH`). Expect 30+ minutes and several GB of disk under `/var/tmp`. The package is then `apt-mark hold`-ed so `apt upgrade` will not replace it with the PPA's latest; run `sudo apt-mark unhold fex-emu-armv8.4` (or `armv8.2`) to undo that.
+
+Since source builds reuse the *current* PPA packaging, only tags from FEX-2501 onward are offered; earlier releases have a different tool layout and GUI toolkit that the packaging does not account for. `fex-emu-wine` is always installed from the PPA; it has no dependency on a specific `fex-emu` version.
+
 ## This does the following
-- Installs FEX PPA and dependencies
+- Installs FEX PPA and dependencies (or builds a chosen FEX release from source)
 - Downloads and installs steam deb
 - Enables thunking for graphics libraries
 - Applies apparmor profiles for FEXBash and Steam
