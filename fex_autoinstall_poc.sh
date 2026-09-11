@@ -125,6 +125,8 @@ fi
 
 if [ "$INSTALL_MODE" = "1" ]; then
   echo "Installing FEX-Emu from the PPA..."
+  # A previous archive install may have held the package at an older version.
+  sudo apt-mark unhold "$FEX_PACKAGE" >/dev/null 2>&1 || true
   sudo apt install -y "$FEX_PACKAGE"
 else
   mapfile -t ARCHIVE_LABELS < <(printf '%s\n' "${ARCHIVE_RELEASES[@]}" | cut -f1)
@@ -135,7 +137,8 @@ else
   echo "Downloading $FEX_CHOICE..."
   wget -q "$FEX_DEB_URL" "${FEX_DEB_URL%/*}/SHA256SUMS"
   sha256sum -c SHA256SUMS
-  sudo apt install -y ./Unofficial-*.deb
+  # Replace whatever FEX is installed, even if it is newer or held from a previous run.
+  sudo apt install -y --reinstall --allow-downgrades --allow-change-held-packages ./Unofficial-*.deb
   # Keep apt from replacing the chosen release with the PPA's latest on upgrade.
   sudo apt-mark hold "$FEX_PACKAGE"
   echo "$FEX_PACKAGE is held at $FEX_TAG; run 'sudo apt-mark unhold $FEX_PACKAGE' to allow PPA upgrades again."
