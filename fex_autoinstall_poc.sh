@@ -110,14 +110,11 @@ sudo apt install -y fex-emu-wine patchelf mesa-vulkan-drivers jq
 
 if [ "$INSTALL_MODE" = "2" ]; then
   echo "Fetching available releases from $ARCHIVE_REPO..."
-  # One "<upstream tag> <build number> <deb url>" line per upstream tag, newest first,
-  # keeping only the highest archive build number for each tag.
+  # One "<upstream tag> <deb url>" line per release, newest first.
   mapfile -t ARCHIVE_RELEASES < <(curl -fsSL "https://api.github.com/repos/$ARCHIVE_REPO/releases?per_page=100" \
-    | jq -r '.[] | select(.draft == false)
-        | (.tag_name | capture("^(?<tag>FEX-[0-9.]+)-(?<n>[0-9]+)$")) as $t
-        | (.assets[] | select(.name | endswith(".deb")) | .browser_download_url) as $url
-        | "\($t.tag) \($t.n) \($url)"' \
-    | sort -k1,1rV -k2,2rn | awk '!seen[$1]++')
+    | jq -r '.[] | select(.draft == false and (.tag_name | test("^FEX-[0-9.]+$")))
+        | "\(.tag_name) \(.assets[] | select(.name | endswith(".deb")) | .browser_download_url)"' \
+    | sort -k1,1rV)
   if [ ${#ARCHIVE_RELEASES[@]} -eq 0 ]; then
     echo "No releases found in $ARCHIVE_REPO; installing the latest PPA release instead."
     INSTALL_MODE=1
@@ -130,9 +127,9 @@ if [ "$INSTALL_MODE" = "1" ]; then
 else
   mapfile -t ARCHIVE_TAGS < <(printf '%s\n' "${ARCHIVE_RELEASES[@]}" | awk '{print $1}')
   FEX_TAG=$(paged_select "Which FEX release do you want to install?" "${ARCHIVE_TAGS[@]}")
-  read -r _ FEX_BUILD_N FEX_DEB_URL < <(printf '%s\n' "${ARCHIVE_RELEASES[@]}" | awk -v t="$FEX_TAG" '$1 == t')
+  read -r _ FEX_DEB_URL < <(printf '%s\n' "${ARCHIVE_RELEASES[@]}" | awk -v t="$FEX_TAG" '$1 == t')
 
-  echo "Downloading $FEX_TAG (archive build $FEX_BUILD_N)..."
+  echo "Downloading $FEX_TAG..."
   wget -q "$FEX_DEB_URL" "${FEX_DEB_URL%/*}/SHA256SUMS"
   sha256sum -c SHA256SUMS
   sudo apt install -y ./Unofficial-*.deb
