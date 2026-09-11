@@ -83,6 +83,8 @@ build_fex_from_source() {
 
   curl -fsSL "$debian_tar_url" | tar -xJ
   sed -i "s/-DOVERRIDE_VERSION=[^ ]*/-DOVERRIDE_VERSION=$tag_version/" debian/rules
+  # Older tags gate unit tests behind BUILD_TESTS (default ON) rather than BUILD_TESTING.
+  sed -i "s/-DBUILD_TESTING=False/-DBUILD_TESTING=False -DBUILD_TESTS=False/" debian/rules
   cat > debian/changelog <<EOF
 $FEX_PACKAGE (${tag_version}~local1) $series; urgency=medium
 
