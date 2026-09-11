@@ -85,7 +85,8 @@ ARM_PLATFORM_VERSION=$(lscpu | grep -qE "dit|flagm2" && echo "armv8.4" || echo "
 echo "Detected ARM platform version: $ARM_PLATFORM_VERSION"
 
 FEX_PACKAGE="fex-emu-$ARM_PLATFORM_VERSION"
-ARCHIVE_REPO="javelina-pkwy/Unofficial-FEX-Package-Archive"
+ARCHIVE_NAME="Unofficial FEX Package Archive"
+ARCHIVE_API="https://gitlab-master.nvidia.com/api/v4/projects/516729"
 
 INSTALL_MODE=1
 echo ""
@@ -113,18 +114,18 @@ echo "Installing FEX-Emu Wine, Vulkan packages, and tools..."
 sudo apt install -y fex-emu-wine patchelf mesa-vulkan-drivers jq
 
 if [ "$INSTALL_MODE" = "2" ]; then
-  echo "Fetching available releases from $ARCHIVE_REPO..."
-  RELEASES_JSON=$(curl -fsSL "https://api.github.com/repos/$ARCHIVE_REPO/releases?per_page=100")
+  echo "Fetching available releases from the $ARCHIVE_NAME..."
+  RELEASES_JSON=$(curl -fsSL "$ARCHIVE_API/releases?per_page=100")
   # One "<label><TAB><deb url>" line per release: the nightly (if any) first, then tagged
-  # releases newest first.
+  # releases newest first. Assets are links into the project's generic package registry.
   mapfile -t ARCHIVE_RELEASES < <(
-    jq -r '.[] | select(.draft == false and .tag_name == "nightly")
-        | "nightly (built \(.published_at[0:10]))\t\(.assets[] | select(.name | endswith(".deb")) | .browser_download_url)"' <<<"$RELEASES_JSON"
-    jq -r '.[] | select(.draft == false and (.tag_name | test("^FEX-[0-9.]+$")))
-        | "\(.tag_name)\t\(.assets[] | select(.name | endswith(".deb")) | .browser_download_url)"' <<<"$RELEASES_JSON" \
+    jq -r '.[] | select(.tag_name == "nightly")
+        | "nightly (built \(.released_at[0:10]))\t\(.assets.links[] | select(.name | endswith(".deb")) | .url)"' <<<"$RELEASES_JSON"
+    jq -r '.[] | select(.tag_name | test("^FEX-[0-9.]+$"))
+        | "\(.tag_name)\t\(.assets.links[] | select(.name | endswith(".deb")) | .url)"' <<<"$RELEASES_JSON" \
       | sort -t$'\t' -k1,1rV | sed '1s/\t/ (latest release)\t/')
   if [ ${#ARCHIVE_RELEASES[@]} -eq 0 ]; then
-    echo "No releases found in $ARCHIVE_REPO; installing the latest PPA release instead."
+    echo "No releases found in the $ARCHIVE_NAME; installing the latest PPA release instead."
     INSTALL_MODE=1
   fi
 fi

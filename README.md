@@ -8,7 +8,7 @@
 ## Choosing a FEX version
 The script asks how you want FEX installed:
 1. **Latest release from the FEX-Emu PPA** (default). The PPA only ever carries the current release, so this is the only version available this way.
-2. **A specific release from the [Unofficial FEX Package Archive](https://github.com/javelina-pkwy/Unofficial-FEX-Package-Archive).** You pick from the archived upstream `FEX-*` releases (newest first). Each is a `.deb` built by that repo's public GitHub Actions workflow from the upstream tag, using the PPA's own `debian/` packaging so it matches the PPA build. The script verifies the download against the release's `SHA256SUMS`, installs it, and `apt-mark hold`s the package so `apt upgrade` will not replace it with the PPA's latest; run `sudo apt-mark unhold fex-emu-armv8.4` to undo that.
+2. **A specific release from the [Unofficial FEX Package Archive](https://gitlab-master.nvidia.com/jubecker/Unofficial-FEX-Package-Archive).** You pick from the archived upstream `FEX-*` releases (newest first), or the nightly build of upstream `main`. Each is a `.deb` built by that project's CI from the upstream tag, using the PPA's own `debian/` packaging so it matches the PPA build. The archive is on the internal GitLab, so this option only works from the corporate network. The script verifies the download against the release's `SHA256SUMS`, installs it, and `apt-mark hold`s the package so `apt upgrade` will not replace it with the PPA's latest; run `sudo apt-mark unhold fex-emu-armv8.4` to undo that.
 
 The archive currently only provides `armv8.4` builds, so option 2 is offered only on armv8.4 hosts. `fex-emu-wine` is always installed from the PPA; it has no dependency on a specific `fex-emu` version.
 
