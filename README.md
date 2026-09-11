@@ -2,7 +2,7 @@
 
 ## How to use
 - In desktop mode right click and select the "Open in Terminal" option.
-- If you have not already done so, run the following command on the new terminal window: `wget https://raw.githubusercontent.com/MitchellAugustin/fex_autoinstall/refs/heads/main/fex_autoinstall_poc.sh && bash fex_autoinstall_poc.sh`
+- If you have not already done so, run the following command on the new terminal window: `wget https://gitlab-master.nvidia.com/jubecker/fex-autoinstall-script/-/raw/main/fex_autoinstall_poc.sh && bash fex_autoinstall_poc.sh`
 - Once installation has completed and for all subsequent runs, Steam can be started by running `steam` normally.
 
 ## Choosing a FEX version
@@ -42,4 +42,4 @@ Options:
 
 ## Troubleshooting
 - If you experience any future crashes in games that were initially playable, update your RootFS by using [FEXRootFSFetcher](https://wiki.fex-emu.com/index.php/Development:Setting_up_RootFS#Quick_Setup_with_FEXRootFSFetcher).
-- If Steam fails to launch with an "exec format error", "You are missing the following 32-bit libraries, and Steam may not run: libc.so.6", or similar, ensure that [patch_steam_for_arm64.patch](https://github.com/MitchellAugustin/fex_autoinstall/blob/main/patch_steam_for_arm64.patch) has been correctly applied to your /usr/lib/steam/bin_steam.sh. (If the patch does not apply, you can launch with `FEXBash steam` instead.)
+- If Steam fails to launch with an "exec format error", "You are missing the following 32-bit libraries, and Steam may not run: libc.so.6", or similar, ensure that [patch_steam_for_arm64.patch](https://gitlab-master.nvidia.com/jubecker/fex-autoinstall-script/-/blob/main/patch_steam_for_arm64.patch) has been correctly applied to your /usr/lib/steam/bin_steam.sh. (If the patch does not apply, you can launch with `FEXBash steam` instead.)

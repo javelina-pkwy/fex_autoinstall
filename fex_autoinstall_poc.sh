@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Usage: wget https://raw.githubusercontent.com/MitchellAugustin/fex_autoinstall/refs/heads/main/fex_autoinstall_poc.sh && bash fex_autoinstall_poc.sh
+# Usage: wget https://gitlab-master.nvidia.com/jubecker/fex-autoinstall-script/-/raw/main/fex_autoinstall_poc.sh && bash fex_autoinstall_poc.sh
 
 # Exit immediately if a command exits with a non-zero status.
 set -e
@@ -156,8 +156,8 @@ fi
 
 echo "Downloading required files..."
 wget https://repo.steampowered.com/steam/archive/stable/steam-launcher_latest_all.deb
-wget https://raw.githubusercontent.com/MitchellAugustin/fex_autoinstall/refs/heads/main/patch_steam_for_arm64.patch
-wget https://raw.githubusercontent.com/MitchellAugustin/fex_autoinstall/refs/heads/main/fex_config_with_thunking_enabled.json
+wget https://gitlab-master.nvidia.com/jubecker/fex-autoinstall-script/-/raw/main/patch_steam_for_arm64.patch
+wget https://gitlab-master.nvidia.com/jubecker/fex-autoinstall-script/-/raw/main/fex_config_with_thunking_enabled.json
 
 echo "Installing Steam from .deb..."
 sudo apt install -y ./steam-launcher_latest_all.deb
