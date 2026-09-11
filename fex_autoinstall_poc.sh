@@ -18,8 +18,9 @@ cleanup() {
 trap cleanup EXIT
 
 # Numbered menu shown 5 entries at a time; echoes the chosen entry.
+# Usage: paged_select <prompt> <default item number, 1-based> <items...>
 paged_select() {
-  local prompt="$1"; shift
+  local prompt="$1" default_item="$2"; shift 2
   local items=("$@")
   local total=${#items[@]} page_size=5 page=0
   while true; do
@@ -33,8 +34,13 @@ paged_select() {
     local extra=""
     [ $end -lt $total ] && { echo "  n) Show next $page_size" >&2; extra="$extra, n"; }
     [ $page -gt 0 ] && { echo "  p) Show previous $page_size" >&2; extra="$extra, p"; }
-    read -rp "Select [1-$((end - start))$extra] (default: 1): " sel
-    sel=${sel:-1}
+    # Enter picks the default only on the page that shows it; elsewhere it picks the first entry.
+    local default_sel=1
+    if [ $((default_item - 1)) -ge $start ] && [ $((default_item - 1)) -lt $end ]; then
+      default_sel=$((default_item - start))
+    fi
+    read -rp "Select [1-$((end - start))$extra] (default: $default_sel): " sel
+    sel=${sel:-$default_sel}
     case "$sel" in
       n|N) [ $end -lt $total ] && page=$((page + 1));;
       p|P) [ $page -gt 0 ] && page=$((page - 1));;
@@ -130,7 +136,10 @@ if [ "$INSTALL_MODE" = "1" ]; then
   sudo apt install -y "$FEX_PACKAGE"
 else
   mapfile -t ARCHIVE_LABELS < <(printf '%s\n' "${ARCHIVE_RELEASES[@]}" | cut -f1)
-  FEX_CHOICE=$(paged_select "Which FEX release do you want to install?" "${ARCHIVE_LABELS[@]}")
+  # Default to the latest tagged release, which follows the nightly when one exists.
+  DEFAULT_ITEM=1
+  [[ "${ARCHIVE_LABELS[0]}" == nightly* ]] && DEFAULT_ITEM=2
+  FEX_CHOICE=$(paged_select "Which FEX release do you want to install?" "$DEFAULT_ITEM" "${ARCHIVE_LABELS[@]}")
   FEX_DEB_URL=$(printf '%s\n' "${ARCHIVE_RELEASES[@]}" | awk -F'\t' -v t="$FEX_CHOICE" '$1 == t {print $2}')
   FEX_TAG=${FEX_CHOICE%% (*}
 
