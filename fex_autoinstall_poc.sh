@@ -119,7 +119,7 @@ if [ "$INSTALL_MODE" = "2" ]; then
   # releases newest first.
   mapfile -t ARCHIVE_RELEASES < <(
     jq -r '.[] | select(.draft == false and .tag_name == "nightly")
-        | "\(.name)\t\(.assets[] | select(.name | endswith(".deb")) | .browser_download_url)"' <<<"$RELEASES_JSON"
+        | "nightly (built \(.published_at[0:10]))\t\(.assets[] | select(.name | endswith(".deb")) | .browser_download_url)"' <<<"$RELEASES_JSON"
     jq -r '.[] | select(.draft == false and (.tag_name | test("^FEX-[0-9.]+$")))
         | "\(.tag_name)\t\(.assets[] | select(.name | endswith(".deb")) | .browser_download_url)"' <<<"$RELEASES_JSON" \
       | sort -t$'\t' -k1,1rV | sed '1s/\t/ (latest release)\t/')
