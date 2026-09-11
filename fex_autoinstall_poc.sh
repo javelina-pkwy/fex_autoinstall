@@ -28,9 +28,7 @@ paged_select() {
     echo "" >&2
     echo "$prompt" >&2
     for ((i = start; i < end; i++)); do
-      local label="${items[$i]}"
-      [ $i -eq 0 ] && label="$label (latest)"
-      echo "  $((i - start + 1))) $label" >&2
+      echo "  $((i - start + 1))) ${items[$i]}" >&2
     done
     local extra=""
     [ $end -lt $total ] && { echo "  n) Show next $page_size" >&2; extra="$extra, n"; }
@@ -88,7 +86,7 @@ echo ""
 echo "How would you like to install FEX?"
 echo "  1) Latest release from the FEX-Emu PPA (recommended)"
 if [ "$ARM_PLATFORM_VERSION" = "armv8.4" ]; then
-  echo "  2) Choose a specific FEX release from the Unofficial FEX Package Archive"
+  echo "  2) Choose a specific FEX release (or the nightly build) from the Unofficial FEX Package Archive"
   while true; do
     read -rp "Select [1-2] (default: 1): " INSTALL_MODE
     INSTALL_MODE=${INSTALL_MODE:-1}
@@ -110,11 +108,15 @@ sudo apt install -y fex-emu-wine patchelf mesa-vulkan-drivers jq
 
 if [ "$INSTALL_MODE" = "2" ]; then
   echo "Fetching available releases from $ARCHIVE_REPO..."
-  # One "<upstream tag> <deb url>" line per release, newest first.
-  mapfile -t ARCHIVE_RELEASES < <(curl -fsSL "https://api.github.com/repos/$ARCHIVE_REPO/releases?per_page=100" \
-    | jq -r '.[] | select(.draft == false and (.tag_name | test("^FEX-[0-9.]+$")))
-        | "\(.tag_name) \(.assets[] | select(.name | endswith(".deb")) | .browser_download_url)"' \
-    | sort -k1,1rV)
+  RELEASES_JSON=$(curl -fsSL "https://api.github.com/repos/$ARCHIVE_REPO/releases?per_page=100")
+  # One "<label><TAB><deb url>" line per release: the nightly (if any) first, then tagged
+  # releases newest first.
+  mapfile -t ARCHIVE_RELEASES < <(
+    jq -r '.[] | select(.draft == false and .tag_name == "nightly")
+        | "\(.name)\t\(.assets[] | select(.name | endswith(".deb")) | .browser_download_url)"' <<<"$RELEASES_JSON"
+    jq -r '.[] | select(.draft == false and (.tag_name | test("^FEX-[0-9.]+$")))
+        | "\(.tag_name)\t\(.assets[] | select(.name | endswith(".deb")) | .browser_download_url)"' <<<"$RELEASES_JSON" \
+      | sort -t$'\t' -k1,1rV | sed '1s/\t/ (latest release)\t/')
   if [ ${#ARCHIVE_RELEASES[@]} -eq 0 ]; then
     echo "No releases found in $ARCHIVE_REPO; installing the latest PPA release instead."
     INSTALL_MODE=1
@@ -125,11 +127,12 @@ if [ "$INSTALL_MODE" = "1" ]; then
   echo "Installing FEX-Emu from the PPA..."
   sudo apt install -y "$FEX_PACKAGE"
 else
-  mapfile -t ARCHIVE_TAGS < <(printf '%s\n' "${ARCHIVE_RELEASES[@]}" | awk '{print $1}')
-  FEX_TAG=$(paged_select "Which FEX release do you want to install?" "${ARCHIVE_TAGS[@]}")
-  read -r _ FEX_DEB_URL < <(printf '%s\n' "${ARCHIVE_RELEASES[@]}" | awk -v t="$FEX_TAG" '$1 == t')
+  mapfile -t ARCHIVE_LABELS < <(printf '%s\n' "${ARCHIVE_RELEASES[@]}" | cut -f1)
+  FEX_CHOICE=$(paged_select "Which FEX release do you want to install?" "${ARCHIVE_LABELS[@]}")
+  FEX_DEB_URL=$(printf '%s\n' "${ARCHIVE_RELEASES[@]}" | awk -F'\t' -v t="$FEX_CHOICE" '$1 == t {print $2}')
+  FEX_TAG=${FEX_CHOICE%% (*}
 
-  echo "Downloading $FEX_TAG..."
+  echo "Downloading $FEX_CHOICE..."
   wget -q "$FEX_DEB_URL" "${FEX_DEB_URL%/*}/SHA256SUMS"
   sha256sum -c SHA256SUMS
   sudo apt install -y ./Unofficial-*.deb
