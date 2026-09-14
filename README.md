@@ -2,7 +2,7 @@
 
 ## How to use
 - In desktop mode right click and select the "Open in Terminal" option.
-- If you have not already done so, run the following command on the new terminal window: `wget https://gitlab-master.nvidia.com/jubecker/fex-autoinstall-script/-/raw/main/fex_autoinstall_poc.sh && bash fex_autoinstall_poc.sh`
+- If you have not already done so, run the following command on the new terminal window: `wget -N https://gitlab-master.nvidia.com/jubecker/fex-autoinstall-script/-/raw/main/fex_autoinstall_poc.sh && bash fex_autoinstall_poc.sh`
 - Once installation has completed and for all subsequent runs, Steam can be started by running `steam` normally.
 
 ## Choosing a FEX version
