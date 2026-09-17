@@ -218,7 +218,11 @@ set -e
 if [ -n "$nvidia_driver_version" ]; then
     echo "Installing NVIDIA NGX libs..."
     nvidia_driver_version=$(cat /sys/module/nvidia/version)
-    wget https://download.nvidia.com/XFree86/Linux-x86_64/$nvidia_driver_version/NVIDIA-Linux-x86_64-$nvidia_driver_version.run
+    runfilename="NVIDIA-Linux-x86_64-$nvidia_driver_version.run"
+    # Public release archive first; unreleased/internal drivers are only on the internal QA server.
+    wget "https://download.nvidia.com/XFree86/Linux-x86_64/$nvidia_driver_version/$runfilename" \
+      || { rm -f "$runfilename"; wget "http://linuxqa.nvidia.com/builds/release/display/x86_64/$nvidia_driver_version/$runfilename"; } \
+      || { echo "Could not download $runfilename from download.nvidia.com or linuxqa.nvidia.com"; exit 1; }
 
     ubuntu=$(jq -r '.Config.RootFS' $HOME/.fex-emu/Config.json)
     rootfs="$HOME/.fex-emu/RootFS/$ubuntu"
